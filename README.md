@@ -481,7 +481,7 @@ notepad .env
 **Required Variables:**
 ```bash
 # Gemini API Key (https://ai.google.dev/)
-GEMINI_API_KEY=AIzaSyBzTqNq2Ey2yAE6FTk29JDes2_1M5TqB7w
+GEMINI_API_KEY=
 
 # Qdrant Cloud (https://cloud.qdrant.io/)
 QDRANT_URL=https://your-cluster.gcp.cloud.qdrant.io
