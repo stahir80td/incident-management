@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/webhook.go",
+      "use": "@vercel/go"
+    },
+    {
+      "src": "api/health.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/webhook",
+      "dest": "/api/webhook.go"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/health.go"
+    }
+  ],
+  "env": {
+    "GO111MODULE": "on"
+  }
+}
