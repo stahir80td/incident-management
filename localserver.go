@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
-	_ "github.com/stahir80td/incident-management/config"
+	"github.com/joho/godotenv"
 	"github.com/stahir80td/incident-management/services"
 )
 
@@ -83,7 +84,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Only process incident.triggered events
 	if payload.Event.EventType != "incident.triggered" {
-		log.Printf("⏭️  Ignoring event type: %s", payload.Event.EventType)
+		log.Printf("⭐️ Ignoring event type: %s", payload.Event.EventType)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status": "ignored",
@@ -134,16 +135,20 @@ func processIncident(data IncidentData) {
 }
 
 func main() {
+	// Load .env file for local development (ignored in Vercel)
+	_ = godotenv.Load()
+
 	http.HandleFunc("/api/webhook", webhookHandler)
 	http.HandleFunc("/api/health", healthHandler)
 
-	port := "8080"
-	//log.Println("=" + "="*60)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	log.Println("🚀 Incident Triage RAG API - Local Server")
-	//log.Println("=" + "="*60)
-	log.Printf("📍 Webhook endpoint: http://localhost:%s/api/webhook", port)
+	log.Printf("🔗 Webhook endpoint: http://localhost:%s/api/webhook", port)
 	log.Printf("💚 Health endpoint:  http://localhost:%s/api/health", port)
-	//log.Println("=" + "="*60)
 	log.Printf("✨ Server listening on port %s...\n", port)
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
