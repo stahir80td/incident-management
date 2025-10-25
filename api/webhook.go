@@ -312,7 +312,13 @@ func searchQdrant(url, apiKey, collection string, embedding []float32, limit int
 }
 
 func generateContext(ctx context.Context, client *genai.Client, prompt string) (string, error) {
-	model := client.GenerativeModel("gemini-1.5-flash")
+	generativeModel := os.Getenv("GENERATIVE_MODEL")
+	if generativeModel == "" {
+		generativeModel = "gemini-2.0-flash-exp"
+	}
+
+	log.Printf("🤖 [GEMINI] Using generative model: %s", generativeModel)
+	model := client.GenerativeModel(generativeModel)
 	model.SetTemperature(0.7)
 	model.SetMaxOutputTokens(800)
 
