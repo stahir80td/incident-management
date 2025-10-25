@@ -104,101 +104,141 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func processIncident(data IncidentData) {
-	log.Printf("Processing incident: %s - %s", data.ID, data.Title)
+	log.Printf("🔄 [START] Processing incident: %s - %s", data.ID, data.Title)
 
 	ctx := context.Background()
 
 	// Validate environment variables
+	log.Printf("📋 [CONFIG] Checking environment variables...")
 	geminiKey := os.Getenv("GEMINI_API_KEY")
 	qdrantURL := os.Getenv("QDRANT_URL")
 	qdrantKey := os.Getenv("QDRANT_API_KEY")
 	pdToken := os.Getenv("PAGERDUTY_API_TOKEN")
 	pdEmail := os.Getenv("PAGERDUTY_EMAIL")
 	collectionName := os.Getenv("COLLECTION_NAME")
+	embeddingModel := os.Getenv("EMBEDDING_MODEL")
 
 	if geminiKey == "" {
-		log.Println("GEMINI_API_KEY is required")
+		log.Println("❌ [ERROR] GEMINI_API_KEY is required")
 		return
 	}
 	if qdrantURL == "" {
-		log.Println("QDRANT_URL is required")
+		log.Println("❌ [ERROR] QDRANT_URL is required")
 		return
 	}
 	if qdrantKey == "" {
-		log.Println("QDRANT_API_KEY is required")
+		log.Println("❌ [ERROR] QDRANT_API_KEY is required")
 		return
 	}
 	if pdToken == "" {
-		log.Println("PAGERDUTY_API_TOKEN is required")
+		log.Println("❌ [ERROR] PAGERDUTY_API_TOKEN is required")
 		return
 	}
 	if pdEmail == "" {
-		log.Println("PAGERDUTY_EMAIL is required")
+		log.Println("❌ [ERROR] PAGERDUTY_EMAIL is required")
 		return
 	}
 	if collectionName == "" {
 		collectionName = "incident-knowledge-base"
 	}
+	if embeddingModel == "" {
+		embeddingModel = "models/gemini-embedding-001"
+	}
+
+	log.Printf("✅ [CONFIG] All environment variables present")
+	log.Printf("📊 [CONFIG] Qdrant URL: %s", qdrantURL)
+	log.Printf("📊 [CONFIG] Collection: %s", collectionName)
+	log.Printf("📊 [CONFIG] Embedding Model: %s", embeddingModel)
 
 	// Initialize Gemini client
+	log.Printf("🤖 [GEMINI] Initializing client...")
 	client, err := genai.NewClient(ctx, option.WithAPIKey(geminiKey))
 	if err != nil {
-		log.Printf("Failed to create Gemini client: %v", err)
+		log.Printf("❌ [GEMINI] Failed to create client: %v", err)
 		return
 	}
 	defer client.Close()
+	log.Printf("✅ [GEMINI] Client initialized")
 
 	// Step 1: Generate embedding
 	searchQuery := fmt.Sprintf("%s %s", data.Title, data.Description)
-	embedding, err := generateEmbedding(ctx, client, searchQuery)
+	log.Printf("🔍 [EMBEDDING] Generating embedding for query: %s", searchQuery[:min(100, len(searchQuery))])
+	embedding, err := generateEmbedding(ctx, client, searchQuery, embeddingModel)
 	if err != nil {
-		log.Printf("Failed to generate embedding: %v", err)
+		log.Printf("❌ [EMBEDDING] Failed: %v", err)
 		return
 	}
+	log.Printf("✅ [EMBEDDING] Generated embedding with %d dimensions", len(embedding))
 
 	// Step 2: Search Qdrant
+	log.Printf("🔎 [QDRANT] Searching for similar incidents...")
 	results, err := searchQdrant(qdrantURL, qdrantKey, collectionName, embedding, 3)
 	if err != nil {
-		log.Printf("Failed to search Qdrant: %v", err)
+		log.Printf("❌ [QDRANT] Search failed: %v", err)
+		return
+	}
+	log.Printf("✅ [QDRANT] Found %d similar incidents", len(results))
+
+	if len(results) == 0 {
+		log.Printf("⚠️  [QDRANT] No similar incidents found, posting generic note")
+		note := "================================\n       AI ENRICHMENT\n================================\n\nNo similar past incidents found in the knowledge base."
+		err := postNoteToPagerDuty(data.ID, note, pdToken, pdEmail)
+		if err != nil {
+			log.Printf("❌ [PAGERDUTY] Failed to post note: %v", err)
+		} else {
+			log.Printf("✅ [COMPLETE] Generic note posted successfully")
+		}
 		return
 	}
 
-	if len(results) == 0 {
-		note := "================================\n       AI ENRICHMENT\n================================\n\nNo similar past incidents found in the knowledge base."
-		postNoteToPagerDuty(data.ID, note, pdToken, pdEmail)
-		return
+	// Log search results
+	for i, result := range results {
+		log.Printf("   [%d] %s - %.1f%% match (%s section)", i+1, result.IncidentID, result.Score*100, result.Section)
 	}
 
 	// Step 3: Generate AI context
+	log.Printf("🤖 [GEMINI] Generating AI context from similar incidents...")
 	prompt := buildPrompt(data, results)
 	aiContext, err := generateContext(ctx, client, prompt)
 	if err != nil {
-		log.Printf("Failed to generate context: %v", err)
+		log.Printf("❌ [GEMINI] Failed to generate context: %v", err)
 		return
 	}
+	log.Printf("✅ [GEMINI] Generated context (%d chars)", len(aiContext))
 
 	// Step 4: Format and post note
+	log.Printf("📝 [PAGERDUTY] Formatting and posting enrichment note...")
 	note := formatNote(aiContext, results)
 	err = postNoteToPagerDuty(data.ID, note, pdToken, pdEmail)
 	if err != nil {
-		log.Printf("Failed to post note: %v", err)
+		log.Printf("❌ [PAGERDUTY] Failed to post note: %v", err)
 		return
 	}
 
-	log.Printf("Successfully enriched incident: %s", data.ID)
+	log.Printf("🎉 [COMPLETE] Successfully enriched incident: %s", data.ID)
 }
 
-func generateEmbedding(ctx context.Context, client *genai.Client, text string) ([]float32, error) {
-	em := client.EmbeddingModel("text-embedding-004")
+func generateEmbedding(ctx context.Context, client *genai.Client, text string, modelName string) ([]float32, error) {
+	log.Printf("🔧 [EMBEDDING] Using model: %s", modelName)
+	em := client.EmbeddingModel(modelName)
 	res, err := em.EmbedContent(ctx, genai.Text(text))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embedding generation failed: %w", err)
 	}
 	return res.Embedding.Values, nil
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func searchQdrant(url, apiKey, collection string, embedding []float32, limit int) ([]SearchResult, error) {
 	searchURL := fmt.Sprintf("%s/collections/%s/points/search", url, collection)
+	log.Printf("🔎 [QDRANT] Request URL: %s", searchURL)
+	log.Printf("🔎 [QDRANT] Embedding dimensions: %d", len(embedding))
 
 	payload := map[string]interface{}{
 		"vector":       embedding,
@@ -227,8 +267,11 @@ func searchQdrant(url, apiKey, collection string, embedding []float32, limit int
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		log.Printf("❌ [QDRANT] Error status: %d", resp.StatusCode)
 		return nil, fmt.Errorf("qdrant returned status %d", resp.StatusCode)
 	}
+
+	log.Printf("✅ [QDRANT] Response received with status 200")
 
 	var searchResp struct {
 		Result []struct {
