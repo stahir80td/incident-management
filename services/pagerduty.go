@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/stahir80td/incident-management/config"
+	"os"
 )
 
 type PagerDutyService struct {
@@ -16,8 +15,8 @@ type PagerDutyService struct {
 
 func NewPagerDutyService() *PagerDutyService {
 	return &PagerDutyService{
-		token: config.AppConfig.PagerDutyToken,
-		email: config.AppConfig.PagerDutyEmail,
+		token: os.Getenv("PAGERDUTY_API_TOKEN"),
+		email: os.Getenv("PAGERDUTY_EMAIL"),
 	}
 }
 

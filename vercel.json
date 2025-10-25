@@ -18,9 +18,10 @@
     {
       "src": "/api/health",
       "dest": "/api/health.go"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/health.go"
     }
-  ],
-  "env": {
-    "GO111MODULE": "on"
-  }
+  ]
 }

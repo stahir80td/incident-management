@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
-
-	"github.com/stahir80td/incident-management/config"
 )
 
 type QdrantService struct {
@@ -47,19 +46,34 @@ type searchResponse struct {
 }
 
 func NewQdrantService() (*QdrantService, error) {
+	qdrantURL := os.Getenv("QDRANT_URL")
+	if qdrantURL == "" {
+		return nil, fmt.Errorf("QDRANT_URL is required")
+	}
+
+	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
+	if qdrantAPIKey == "" {
+		return nil, fmt.Errorf("QDRANT_API_KEY is required")
+	}
+
+	collectionName := os.Getenv("COLLECTION_NAME")
+	if collectionName == "" {
+		collectionName = "incident-knowledge-base"
+	}
+
 	ctx := context.Background()
 
 	// Clean URL - remove port if present for cloud
-	baseURL := strings.TrimSuffix(config.AppConfig.QdrantURL, ":6333")
+	baseURL := strings.TrimSuffix(qdrantURL, ":6333")
 	if !strings.HasPrefix(baseURL, "http") {
 		baseURL = "https://" + baseURL
 	}
 
 	return &QdrantService{
 		baseURL:    baseURL,
-		apiKey:     config.AppConfig.QdrantAPIKey,
+		apiKey:     qdrantAPIKey,
 		ctx:        ctx,
-		collection: config.AppConfig.CollectionName,
+		collection: collectionName,
 		httpClient: &http.Client{},
 	}, nil
 }

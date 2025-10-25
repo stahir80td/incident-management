@@ -3,9 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/google/generative-ai-go/genai"
-	"github.com/stahir80td/incident-management/config"
 	"google.golang.org/api/option"
 )
 
@@ -15,8 +15,13 @@ type GeminiService struct {
 }
 
 func NewGeminiService() (*GeminiService, error) {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is required")
+	}
+
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(config.AppConfig.GeminiAPIKey))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
@@ -29,7 +34,12 @@ func NewGeminiService() (*GeminiService, error) {
 
 // GenerateEmbedding creates a vector embedding for the given text
 func (g *GeminiService) GenerateEmbedding(text string, taskType string) ([]float32, error) {
-	em := g.client.EmbeddingModel(config.AppConfig.EmbeddingModel)
+	embeddingModel := os.Getenv("EMBEDDING_MODEL")
+	if embeddingModel == "" {
+		embeddingModel = "models/text-embedding-004"
+	}
+
+	em := g.client.EmbeddingModel(embeddingModel)
 
 	// Set task type for better embeddings
 	var task genai.TaskType
@@ -56,7 +66,12 @@ func (g *GeminiService) GenerateEmbedding(text string, taskType string) ([]float
 
 // GenerateContext uses Gemini to generate AI triage context
 func (g *GeminiService) GenerateContext(prompt string) (string, error) {
-	model := g.client.GenerativeModel(config.AppConfig.GenerativeModel)
+	generativeModel := os.Getenv("GENERATIVE_MODEL")
+	if generativeModel == "" {
+		generativeModel = "gemini-2.0-flash-exp"
+	}
+
+	model := g.client.GenerativeModel(generativeModel)
 
 	// Configure model for concise responses
 	model.SetTemperature(0.7)
