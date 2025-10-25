@@ -92,15 +92,15 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return 200 immediately (async processing)
+	// Return 202 immediately
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":      "accepted",
 		"incident_id": payload.Event.Data.ID,
 	})
 
-	// Process in background (non-blocking)
-	go processIncident(payload.Event.Data)
+	// Process synchronously (Vercel has timeout limits for background processing)
+	processIncident(payload.Event.Data)
 }
 
 func processIncident(data IncidentData) {
